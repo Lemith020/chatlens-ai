@@ -1,11 +1,4 @@
 
-// Root route
-app.get('/', (req, res) => {
-    res.json({
-        message: 'Welcome to your Express API!',
-        status: 'success'
-    });
-});
 
 
 app.get('/api/health', (req, res) => {
