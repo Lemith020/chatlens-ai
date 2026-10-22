@@ -1,15 +1,3 @@
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware to parse incoming JSON requests
-app.use(express.json());
-
-// Request logging middleware (optional)
-app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    next();
-});
 
 // Root route
 app.get('/', (req, res) => {
