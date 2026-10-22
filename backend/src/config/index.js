@@ -1,1 +1,0 @@
-// this  is  index.js  file  in the  config 
