@@ -7,7 +7,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// Health check endpoint
+
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'healthy',
@@ -16,7 +16,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Global error handling middleware
+
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Something went wrong!' });
