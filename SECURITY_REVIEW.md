@@ -16,15 +16,7 @@ No embedded WhatsApp session, login credential, private-message sample, or exfil
 - Confirmed .gitignore rules cover dummy session/cache paths, .env, database/data, logs, and node_modules without opening those directories.
 - After the security fixes, all 28 offline tests passed, including local Host/Origin rejection, no static-file routes, safe error diagnostics, and fake-client startup/shutdown. All backend JavaScript syntax checks passed. No live WhatsApp connection was run.
 
-## Dependency findings and remediation
 
-The initial npm audit --json --ignore-scripts reported six high-severity affected packages, zero critical, from two underlying advisories:
-
-- body-parser: compressed-request denial of service, GHSA-27r3-jxmh-p828: https://github.com/advisories/GHSA-27r3-jxmh-p828
-- zod: oversized-collection memory exhaustion, GHSA-mrhx-c7xc-m3w5: https://github.com/advisories/GHSA-mrhx-c7xc-m3w5
-- chromium-bidi, puppeteer-core, puppeteer, and whatsapp-web.js are additionally flagged through the transitive zod dependency chain. Six package warnings do not mean six independent vulnerabilities.
-
-These findings were not evidence of WhatsApp account compromise. Runtime exploitability was not established. Targeted fixes are now applied:
 
 
 
