@@ -185,4 +185,5 @@ Do not commit generated sessions, caches, installed packages, private messages, 
 
 ## Disclaimer
 
-ChatLens AI is an independent learning project. It is not affiliated with WhatsApp or Meta. It uses an unofficial WhatsApp integration, which can break when WhatsApp changes and may carry account restriction risks.
+ChatLens AI is an independent learning project. It is not affiliated with WhatsApp or Meta. It uses an unofficial WhatsApp integration, which can break when WhatsApp changes and may carry account restriction risks.Lemith Nanditha
+
