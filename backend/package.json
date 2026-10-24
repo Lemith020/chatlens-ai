@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "test": "node --test test/*.test.js",
+    "check:publication": "node scripts/check-publication.js"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +19,15 @@
   },
   "overrides": {
     "whatsapp-web.js": {
-      "puppeteer": "25.6.0"
+      "puppeteer": "25.16.0"
     }
+  },
+  "files": [
+    "index.js",
+    "src/",
+    "scripts/"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

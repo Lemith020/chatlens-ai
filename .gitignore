@@ -17,3 +17,18 @@ logs/
 *.sqlite3-*
 
 dist/
+# Private exports, browser captures, backups, and accidental project archives
+private/
+exports/
+backups/
+screenshots/
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.har
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
