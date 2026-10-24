@@ -1,189 +1,218 @@
 # ChatLens AI
 
-ChatLens AI is a local web app for reviewing WhatsApp group conversations. Its goal is to help users find important messages, read short summaries, and identify tasks and deadlines.
+A local web app for reviewing selected WhatsApp group conversations. The core Express backend is implemented. React dashboard, SQLite persistence, Ollama analysis, summaries, tasks, and AI progress tracking are planned and are not part of this change.
 
-The web dashboard, backend, database, and AI processing are intended to run on the user's computer. A phone is used to link WhatsApp by scanning a QR code.
+## Verified progress
 
-## Project Status
+The user previously verified QR login, saved-session reuse, group listing, and fetching ten mixed records. This version adds bounded plain-text history search and multiple-group requests. Its offline tests pass; the changed integration still needs the manual live verification below. Offline tests do not establish unread preservation or complete history access.
 
-The prototype can connect to WhatsApp, select a group, and fetch recent messages. The project is being moved from one large `index.js` file into smaller modules.
+## Structure
 
-The React dashboard, SQLite storage, and local AI analysis are planned features. Creating their folders does not mean these features are complete.
-
-## Technology Stack
-
-| Technology | Purpose |
+| File or folder | Responsibility |
 | --- | --- |
-| JavaScript | Main programming language |
-| Node.js | Runs the backend |
-| Express | Provides the local HTTP API |
-| whatsapp-web.js | Connects to WhatsApp through a linked web session |
-| Puppeteer and Chrome | Run and control the WhatsApp Web browser |
-| qrcode-terminal | Displays a login QR code in the terminal |
-| React | Planned browser dashboard |
-| SQLite | Planned local data storage |
-| Ollama and a local LLM | Planned message analysis |
+| backend/index.js | Small entry point, shared client setup, process signal handlers. |
+| backend/src/server.js | Loopback HTTP startup and idempotent shutdown; cleanup after startup/bind failure. |
+| backend/src/app.js | Express wiring, 4 KB JSON limit, routes, safe errors. |
+| backend/src/config/index.js | Port, fixed 127.0.0.1 host, original session path and Chrome settings. |
+| backend/src/features/whatsapp/whatsapp.client.js | One client shared through Node module caching. |
+| backend/src/features/whatsapp/whatsapp.service.js | Connection status, QR display, bounded browser cleanup. |
+| backend/src/features/whatsapp/whatsapp.routes.js | Status endpoint. |
+| backend/src/features/groups | Metadata routes and stable group ID validation. |
+| backend/src/features/messages/messages.routes.js | Single and multiple selection endpoints. |
+| backend/src/features/messages/messages.service.js | Selection checks, serial processing, request lock, per-group failures. |
+| backend/src/features/messages/messages.history.js | Bounded WhatsApp compatibility adapter; text filtering and history metadata. |
+| backend/src/middleware | Local Host/Origin protection and safe error responses. |
+| backend/test/api.test.js | Synthetic offline HTTP, browser-adapter, lifecycle, and protection tests. |
+| backend/src/database, backend/src/features/analysis, backend/src/integrations | Placeholders for planned storage and AI features. |
+| frontend | Reserved for the planned dashboard; unchanged. |
 
-## Folder Structure
+## Setup and startup
 
-This tree follows the supplied project screenshot. Collapsed folders are shown without guessing their internal filenames.
+Requires Node.js >=22.12.0 (tested here with v24.21.0), installed backend dependencies, and Google Chrome. Security maintenance updated the Puppeteer override from 25.6.0 to 25.16.0 and body-parser to 2.4.0 in the lock file. The resulting supported chromium-bidi dependency uses patched Zod 4.6.7. whatsapp-web.js remains 1.34.7; the Chrome channel/settings and session path are unchanged. The updated browser integration still needs your live verification.
 
-```text
-chatlens-ai/
-├── backend/
-│   ├── .wwebjs_auth/          # Private local WhatsApp session
-│   ├── .wwebjs_cache/         # Generated WhatsApp Web cache
-│   ├── node_modules/         # Installed backend packages
-│   ├── src/
-│   │   ├── config/
-│   │   │   └── index.js
-│   │   ├── database/
-│   │   │   ├── migrations/
-│   │   │   └── connection.js
-│   │   ├── features/
-│   │   │   ├── analysis/
-│   │   │   ├── groups/
-│   │   │   ├── messages/
-│   │   │   └── whatsapp/
-│   │   ├── integrations/
-│   │   │   └── ollama.client.js
-│   │   ├── middleware/
-│   │   │   └── error-handler.js
-│   │   └── app.js
-│   ├── index.js
-│   ├── package-lock.json
-│   └── package.json
-├── frontend/
-├── .gitignore
-└── README.md
-```
+From the **project root**:
 
-## What Each Folder Does
+~~~powershell
+# Only if dependencies are not already installed:
+npm.cmd --prefix backend ci --ignore-scripts
+npm.cmd --prefix backend start
+~~~
 
-The responsibilities below describe the intended structure. Some modules may still be empty or under development.
+Alternatively, from **backend/**:
 
-| Folder | Responsibility |
+~~~powershell
+npm.cmd start
+~~~
+
+Installation uses --ignore-scripts to skip dependency lifecycle hooks and browser downloads; this app uses your installed Chrome.
+
+The API listens only at http://127.0.0.1:3001. Set $env:PORT before starting to choose a different port; update example URLs accordingly. The host cannot be overridden. Chrome remains visible, with the existing 300000 ms protocol timeout. The absolute session directory remains backend/.wwebjs_auth regardless of working directory.
+
+If linking is needed, scan the terminal QR using WhatsApp > Linked devices. Only the scannable QR is rendered; the raw payload is not printed. Do not capture or share that terminal. Saved sessions are reused. Press Ctrl+C to stop. Cleanup calls destroy, never logout, and has a five-second deadline; if it fails, only this client's owned browser process is terminated. A late initialization completion triggers cleanup again. There are no automatic reconnect/retry loops. Fatal initialization failure closes HTTP too; terminal event states such as auth_failure/disconnected are available from status while HTTP remains running.
+
+## API
+
+No separate selection endpoint or stored selection is needed: pass IDs returned by the group list. Startup never automatically fetches groups or message bodies.
+
+| Method and path | Response |
 | --- | --- |
-| `chatlens-ai/` | Root folder for the full web app. |
-| `backend/` | Contains the Node.js server, WhatsApp connection, API, and backend dependencies. |
-| `backend/.wwebjs_auth/` | Stores sensitive linked-device session data. It allows the app to reuse an approved login. Keep it local and out of Git. |
-| `backend/.wwebjs_cache/` | Stores generated WhatsApp Web cache files. Keep it out of Git. |
-| `backend/node_modules/` | Contains packages installed by npm. Do not edit or commit this folder. |
-| `backend/src/` | Contains the backend application modules. |
-| `backend/src/config/` | Keeps settings such as the host, port, and local file paths in one place. |
-| `backend/src/database/` | Contains database connection and schema setup code. |
-| `backend/src/database/migrations/` | Contains ordered changes to the database schema, such as creating or changing tables. Commit schema code, not private database files. |
-| `backend/src/features/` | Groups code by feature so related logic stays together. |
-| `backend/src/features/whatsapp/` | Owns WhatsApp client setup, connection events, and connection status. |
-| `backend/src/features/groups/` | Lists available groups and validates the user's group selections. |
-| `backend/src/features/messages/` | Fetches messages for selected groups and prepares a consistent message format. |
-| `backend/src/features/analysis/` | Holds analysis instructions and logic for categories, summaries, tasks, and deadlines. |
-| `backend/src/integrations/` | Contains adapters for services used by the app. |
-| `backend/src/middleware/` | Contains shared HTTP request and error handling. |
-| `frontend/` | Contains the browser dashboard. It will call the backend API to display groups, messages, and reports. |
+| GET /api/status | API health and WhatsApp status/ready. |
+| GET /api/groups | Group metadata: id, name, unreadCount. No direct chats. |
+| GET /api/groups/:groupId/messages | groupId, messages, history for one group. |
+| POST /api/messages | JSON body with groupIds: 1 to 5 unique group IDs; returns results per group. |
 
-## What Each Visible File Does
+Status example:
 
-| File | Responsibility |
-| --- | --- |
-| `backend/index.js` | Backend entry point. After refactoring, it should start the HTTP server and WhatsApp connection, and coordinate shutdown. The prototype currently contains additional logic that is being moved into modules. |
-| `backend/src/app.js` | Creates the Express app and connects routes and middleware. Keep server startup separate from app setup. |
-| `backend/src/config/index.js` | Exports shared configuration. Use stable paths so moving source files does not change the saved WhatsApp session location. |
-| `backend/src/database/connection.js` | Opens and provides the local SQLite database connection when storage is implemented. |
-| `backend/src/integrations/ollama.client.js` | Sends analysis requests to the local Ollama service and returns its responses. It should use a local model for the local-processing design. |
-| `backend/src/middleware/error-handler.js` | Sends consistent API error responses without exposing private messages, credentials, or internal stack traces to the frontend. |
-| `backend/package.json` | Defines backend dependencies, npm scripts, and dependency overrides. |
-| `backend/package-lock.json` | Records the dependency versions resolved by npm for repeatable installation. Commit it with dependency changes. |
-| `.gitignore` | Tells Git which untracked generated or private files to ignore. It does not remove files already tracked or committed. |
-| `README.md` | Explains the project, setup, structure, progress, and privacy rules. |
+~~~json
+{ "status": "ok", "whatsapp": { "status": "ready", "ready": true } }
+~~~
 
-The screenshot does not show files inside the feature folders or `frontend/`. Add their exact names and responsibilities here as those files are implemented.
+WhatsApp states: idle, initializing, qr_required, authenticated (not yet ready), ready, auth_failure, disconnected, error, stopping, stopped. The API's status=ok means HTTP is responding; check whatsapp.ready before collecting messages. Stopping/stopped generally cannot be observed after HTTP closes.
 
-## How the App Will Work
+Single-group response example, using dummy content:
 
-1. The user starts the local backend and opens the web dashboard.
-2. The user links WhatsApp with a QR code when required.
-3. The dashboard requests the available groups from the backend.
-4. The user selects one or more groups.
-5. The backend validates the selection and fetches the requested messages.
-6. A local LLM analyzes the text through Ollama.
-7. The dashboard displays important messages, summaries, tasks, and references to the original messages.
+~~~json
+{
+  "groupId": "123@g.us",
+  "messages": [{
+    "id": "dummy-message-1", "groupId": "123@g.us", "timestamp": 100,
+    "type": "chat", "body": "Dummy meeting reminder", "fromMe": false
+  }],
+  "history": { "reason": "history_unavailable", "scanned": 3, "loads": 1 }
+}
+~~~
 
-WhatsApp login approval applies to the linked session. Restricting processing to selected groups is the responsibility of the application code.
+Timestamps are Unix seconds. Only type=chat with non-empty trimmed body is included. Media (including captions), stickers, system records, and blank bodies are excluded. Results are deduplicated by serialized message ID and returned oldest to newest within the recent selected text messages.
 
-## Clean Code Rules
+Multi-group request and partial response examples:
 
-- Keep startup code in `backend/index.js` small.
-- Keep HTTP routes focused on input validation, calling services, and sending responses.
-- Keep feature logic in the relevant feature folder.
-- Keep WhatsApp library workarounds inside backend integration or feature code.
-- Keep AI requests separate from message collection.
-- Use one shared WhatsApp client instead of creating a client for each API request.
-- Return a consistent message format to the frontend instead of exposing library objects.
-- Handle errors explicitly. Do not silently treat a failed fetch as an empty conversation.
-- Avoid logging message text or session details.
-- Check connection, group selection, and message fetching after changing integration code.
+~~~json
+{ "groupIds": ["123@g.us", "456@g.us"] }
+~~~
 
-This structure reduces coupling, but changes still need appropriate verification.
+~~~json
+{
+  "results": [
+    { "groupId": "123@g.us", "messages": [], "history": { "reason": "history_unavailable", "scanned": 0, "loads": 1 } },
+    { "groupId": "456@g.us", "error": { "code": "MESSAGE_FETCH_FAILED", "message": "Message history could not be fetched." } }
+  ]
+}
+~~~
 
-## Backend Setup
+Multi-group HTTP status is 200 if all groups succeed, 207 if any selected group fails (including when all fail). Inspect each result.error. Malformed whole requests fail before any content is fetched. Valid but missing IDs produce per-group GROUP_NOT_FOUND in batch responses, or HTTP 404 for a single group. No content is fetched from unselected IDs.
 
-Install Node.js and Git. The current browser configuration also uses an installed Google Chrome.
+Errors use { error: { code, message } }. Not ready: 503. Invalid ID/selection or JSON: 400. Missing route/group: 404. Wrong POST content type or compressed request body: 415. Compressed bodies are disabled before decompression. Body over 4 KB: 413. Message-fetch failure or timeout: 502. Overlapping message request: 429. Unexpected errors: generic 500. Raw library errors, stack traces, disconnect reasons, credentials, and message bodies are not logged or exposed through errors. Fetch failures are never silently converted to an empty success.
 
-From the project root:
+## History limits and compatibility
 
-```powershell
-cd backend
-npm install
-node index.js
-```
+Each group returns up to ten recent plain-text messages. It searches beyond ten mixed records, subject to **500 unique records**, **five earlier-history load calls**, and a **30-second adapter deadline** per group. Group requests are processed sequentially; one message request may be active at a time. A five-group batch can therefore take approximately 150 seconds plus metadata/protocol overhead. The limits are fixed; there is no unlimited-history option.
 
-When a QR code appears, open WhatsApp on the phone and use **Linked devices > Link a device** to scan it. Do not share the QR code or session files.
+history.reason is:
 
-Keep this terminal open while the backend is running. Press `Ctrl + C` to stop it. Stopping the process does not revoke the linked-device login. To revoke access, log out the device from WhatsApp's **Linked devices** screen.
+- requested_count: ten eligible text messages were found.
+- scan_limit: the 500-record or five-load bound was reached.
+- history_unavailable: no accessible chat model, an empty load, or a load that added no new IDs. Available text results are returned, possibly none.
 
-Frontend and Ollama startup instructions will be added when those features are implemented.
+The installed API provides no sufficiently reliable exhaustion signal in this adapter. Consequently this version **never claims history_exhausted**. Empty/no-progress loads do not prove that older messages do not exist. Load exceptions and timeouts are failures, even if some messages were already found. The timeout stops further adapter iterations; the already-issued browser operation cannot be cancelled by Promise.race. Chrome/protocol failures may still require restarting the backend.
 
-## Current Integration Notes
+Group metadata retains the WAWebCollections workaround. Message history retains the tested Chat ID construction and the same WWebJS.getChat(..., { getAsModel: false }) / WAWebChatLoadMessages calls used internally by the installed library. The adapter replaces the library's unbounded fetchMessages loop with explicit limits. These are internal WhatsApp interfaces and need live retesting after integration updates. No UI automation opens chats. App code never calls sendSeen, markUnread, sendMessage, or chat mutation methods.
 
-- The working prototype uses `whatsapp-web.js` version `1.34.7` with a Puppeteer override to `25.6.0`.
-- Keep the working dependency configuration and lock file during refactoring.
-- Basic group lookup currently uses an internal WhatsApp collection as a compatibility workaround.
-- The tested message-fetch workaround creates a `Chat` instance from the selected group ID before calling `fetchMessages()`.
-- These workarounds depend on library and WhatsApp Web behavior. Test them again after dependency updates.
-- Fetching ten recent messages does not mean fetching ten unread messages.
-- Image and video message text may be captions. Reading the media itself needs additional processing.
-- The prototype does not prove that all past messages or all unread messages are available.
+Recent text messages are **not** WhatsApp unread messages. unreadCount is WhatsApp metadata, not an AI processing checkpoint. This backend does not save messages or track which messages have been analyzed. Unread preservation and full history availability remain unverified live behaviors.
 
-## Local Privacy
+## Offline checks
 
-- Bind the HTTP server to `127.0.0.1` for local access.
-- Keep session files, chat exports, databases, logs, secrets, and real-chat screenshots out of Git.
-- Do not expose session or cache folders through Express static routes.
-- Store private database files in an ignored location such as `backend/data/` when storage is added.
-- Use a local Ollama model if messages must stay on the computer for AI analysis. Cloud models or APIs would change that design.
-- WhatsApp still needs a network connection. Local AI processing does not make WhatsApp offline.
-- SQLite files are not automatically encrypted.
-- A private GitHub repository is not a place to store login sessions or chat data.
-- Local processing reduces exposure but does not remove risks such as malware or unauthorized access to the computer.
+From the **project root** (no Chrome launch, WhatsApp login, session access, or real messages):
 
-## Git Tracking
+~~~powershell
+npm.cmd --prefix backend test
+node --check backend/index.js
+Get-ChildItem backend/src,backend/test,backend/scripts -Recurse -File -Filter *.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' } }
+~~~
 
-Commit source code, documentation, `.gitignore`, `package.json`, `package-lock.json`, and database migrations.
+From **backend/** instead:
 
-Do not commit generated sessions, caches, installed packages, private messages, or database contents. A group name written directly in source code is also visible to anyone who can read the repository. Prefer user selection or local configuration.
+~~~powershell
+npm.cmd test
+node --check index.js
+Get-ChildItem src,test,scripts -Recurse -File -Filter *.js | ForEach-Object { node --check $_.FullName; if ($LASTEXITCODE -ne 0) { throw 'Syntax check failed' } }
+~~~
 
-## Next Milestones
+Tests execute the real adapter function against synthetic browser models and fake clients. They cover transitions, input limits, group filtering, history mixing/deduplication/order, fewer/empty results, count/scan/load/no-progress/time bounds, partial failures, concurrency, local protections, startup failures, and shutdown. They do not import the shared live-client module or call the real library's initialize method.
 
-- [ ] Move the working prototype into the feature structure.
-- [ ] Verify local status, group, and message API routes.
-- [ ] Build the React dashboard with group selection.
-- [ ] Add SQLite storage and duplicate-message handling.
-- [ ] Add Ollama analysis and validate Sinhala, Singlish, and English results.
-- [ ] Separate WhatsApp unread state from the app's last-analyzed position.
-- [ ] Add disconnect and delete-data controls.
+## Manual live verification in Windows PowerShell
 
-## Disclaimer
+Run these yourself only when ready. From the **project root**, terminal 1:
 
-ChatLens AI is an independent learning project. It is not affiliated with WhatsApp or Meta. It uses an unofficial WhatsApp integration, which can break when WhatsApp changes and may carry account restriction risks.
+~~~powershell
+npm.cmd --prefix backend start
+~~~
 
+Terminal 2 (any directory), after WhatsApp is ready:
+
+~~~powershell
+$base = 'http://127.0.0.1:3001'
+Invoke-RestMethod "$base/api/status" -ErrorAction Stop
+$groups = (Invoke-RestMethod "$base/api/groups" -ErrorAction Stop).groups
+$groups | Format-Table id, name, unreadCount
+
+# Dummy ID: replace with one from your group list, with no trailing spaces.
+$groupId = '123@g.us'
+$url = "$base/api/groups/" + [uri]::EscapeDataString($groupId.Trim()) + '/messages'
+$result = Invoke-RestMethod $url -ErrorAction Stop
+$result.history
+$result.messages.Count
+$result.messages | Select-Object id, timestamp, type
+# Optional, view message bodies locally only:
+# $result.messages | Format-Table timestamp, body -Wrap
+
+# Dummy IDs: replace BOTH with available IDs from your list.
+$body = @{ groupIds = @('123@g.us', '456@g.us') } | ConvertTo-Json -Compress
+$batch = Invoke-RestMethod "$base/api/messages" -Method Post -ContentType 'application/json' -Body $body -ErrorAction Stop
+$batch.results | ForEach-Object {
+  [pscustomobject]@{ groupId = $_.groupId; count = $_.messages.Count; reason = $_.history.reason; error = $_.error.code }
+}
+~~~
+
+Check that all returned types are chat, bodies are nonblank, IDs are unique, times ascend, and no group has more than ten messages. For a group with fewer messages, inspect history.reason; do not infer exhaustion. You can combine an available ID with fake 999@g.us to check a per-group 404, provided it is not actually in your list. Before readiness, group/message routes should return 503. Ctrl+C should release the API port and close only the owned Chrome process. Start again to check saved-session reuse. Compare unread status manually if needed; offline tests cannot guarantee WhatsApp's internal side effects.
+
+## Safe startup diagnostics
+
+Startup and cleanup failures emit one JSON line per failing step: step, name, code, and description. Steps distinguish HTTP startup/close, WhatsApp initialization, initialization cleanup, normal cleanup, and forced browser cleanup. Recognized error names/codes are allowlisted; unknown values become UnknownError/UNKNOWN. Descriptions are fixed categories, never copied raw messages. Paths, stack traces, session data, credentials, and arbitrary error properties are withheld.
+
+For example, an occupied port produces a diagnostic with step=http.start and code=EADDRINUSE. This is an example, not a diagnosis of your machine. If initialization and cleanup both fail, the original initialization error remains the primary cause internally and each cleanup failure is reported separately. Startup or cleanup failure sets exit code 1.
+
+Rerun from the project root:
+
+~~~powershell
+npm.cmd --prefix backend start
+# After the process exits:
+$LASTEXITCODE
+~~~
+
+The focused offline regression test is backend/test/diagnostics.test.js. It tests the actual entry point with an intercepted fake client, including simultaneous initialization/cleanup failure, non-zero exit, and private-data redaction. It never constructs the live client or reads a session.
+
+## Publication and security checks
+
+From the **project root**, before publishing:
+
+~~~powershell
+npm.cmd --prefix backend run check:publication
+npm.cmd --prefix backend audit --ignore-scripts
+# Review these locally; do not paste private content into chat:
+git diff --cached --name-only
+git diff --cached
+~~~
+
+From **backend/** use npm.cmd run check:publication and npm.cmd audit --ignore-scripts. The publication command checks Git path metadata (tracked and unignored candidate files) without opening session files or secrets. It fails for private/generated path categories, including already-tracked ignored paths. It is a manual pre-publication check, not an installed Git hook, a content-secret scanner, or a history scanner. A passing result does not make arbitrary source text or images safe to publish.
+
+Session/cache, .env, databases/logs, private/exports/backups/screenshots folders, archive files, browser HAR captures, and common private-key files are ignored. The package.json files allowlist also limits npm packaging to application source/scripts and npm's mandatory metadata; it does not control GitHub contents. Do not upload a project ZIP containing ignored local sessions, and do not share rendered QR codes. QR display remains necessary for linking and is unchanged.
+
+The 2026-10-24 security verification passed 28 offline tests and npm audit reported zero known vulnerabilities. This is a point-in-time advisory result, not a guarantee against unknown flaws. Installed module imports and synthetic browser-protocol validation passed without launching Chrome. Run your normal status/group/message workflow again after the browser dependency update. See SECURITY_REVIEW.md for scope and remaining limits. The user accepted the historical group-name disclosure; Git history was not rewritten.
+
+## Local protection and privacy
+
+Every response uses Cache-Control: no-store. Host must exactly match 127.0.0.1:<actual API port>. Browser Origin, when present, must exactly match http://127.0.0.1:<port>; null and foreign origins and cross-site Fetch Metadata requests are rejected. Wildcard CORS is not enabled. A future dashboard needs same-origin API proxying; do not disable these checks to connect a separate development port. These protections are not authentication against other local programs.
+
+No static files are served. Keep backend/.wwebjs_auth/, .wwebjs_cache/, node_modules/, data/, logs/, .env secrets, chat exports, databases, private logs, real-message screenshots, and session files outside Git. Existing .gitignore covers generated sessions, caches, data, secrets, and logs. Source, tests, README, package manifests, and lock file are the project artifacts; this task does not stage, commit, or push anything.
+
+WhatsApp still requires network access. Local operation is not offline WhatsApp. Future local AI processing is planned, not implemented. SQLite would not automatically encrypt stored data. ChatLens AI is independent of WhatsApp/Meta and uses an unofficial integration that can break and may carry account restriction risks.
