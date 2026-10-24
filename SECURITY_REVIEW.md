@@ -51,6 +51,6 @@ Do not share the rendered login QR, backend/.wwebjs_auth, cache/browser profiles
 4. Remember Git commit author names/emails are also published with history. Existing GitHub remote contents, other clones, deleted/unreachable history, Git LFS, releases, Actions artifacts, and repository access settings were not verified.
 5. If a session/QR was ever shared elsewhere, revoke the affected linked device from the phone. No exposed session was identified in this local review.
 
-No staging, commit, push, deployment, session access/modification, or session deletion was performed. Dependency updates were authorized and are described above. npm audit queried dependency metadata only; no WhatsApp data was uploaded. This review file intentionally includes no real group name, chat content, or login values.
+
 
 
