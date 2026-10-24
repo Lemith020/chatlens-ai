@@ -53,8 +53,4 @@ Do not share the rendered login QR, backend/.wwebjs_auth, cache/browser profiles
 
 No staging, commit, push, deployment, session access/modification, or session deletion was performed. Dependency updates were authorized and are described above. npm audit queried dependency metadata only; no WhatsApp data was uploaded. This review file intentionally includes no real group name, chat content, or login values.
 
-## Publication protections added
 
-.gitignore now also excludes private/exports/backups/screenshots folders, common archives, HAR captures, private-key formats, and credentials JSON filenames. Existing session/cache/.env/database/log ignores remain intact. The package manifest limits npm packaging through a files allowlist; this does not control Git publication.
-
-Run npm.cmd --prefix backend run check:publication from the project root before committing. The script examines Git tracked/unignored file path metadata only and rejects private/generated path categories without reading file contents. It is a manually invoked guard, not an automatic commit/push hook; its tests use dummy paths. Current repository path check and dummy ignore-rule checks pass. Review staged content manually too, because a source-code string, image, renamed session, or unusual archive can still contain secrets. Never share the terminal QR or a ZIP of the private working directory.
