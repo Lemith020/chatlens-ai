@@ -37,13 +37,7 @@ No audit fix --force or unsupported major Zod override was used.
 
 ## Existing protections and remaining boundaries
 
-The API binds to 127.0.0.1 only, enforces exact local Host/Origin, does not enable CORS, uses no-store responses, and serves no static source/session files. The app has no remote-control endpoint or message-sending route. Only selected group messages are fetched. Application-owned code contains no identified third-party chat-upload endpoint.
 
-The API is not authenticated against other local programs. Malware, another user with filesystem access, or a tunnel/reverse proxy can bypass the intended local boundary. Never expose this API through public hosting, port forwarding, or a tunnel. WhatsApp and its library/browser still make their normal network connections; this review did not monitor them or certify their behavior.
-
-Do not share the rendered login QR, backend/.wwebjs_auth, cache/browser profiles, .env, real chat exports, private logs, screenshots, backups, or archives of the project containing private data. .gitignore does not protect files already committed and cannot detect secrets pasted into source, README, images, or arbitrary archive names.
-
-## Before publication
 
 
 
