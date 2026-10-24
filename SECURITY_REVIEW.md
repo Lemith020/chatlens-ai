@@ -26,16 +26,7 @@ The initial npm audit --json --ignore-scripts reported six high-severity affecte
 
 These findings were not evidence of WhatsApp account compromise. Runtime exploitability was not established. Targeted fixes are now applied:
 
-- Updated body-parser from 2.3.0 to 2.4.0 through Express's compatible declared version range.
-- Disabled compressed JSON parsing (inflate: false) and added a sanitized 415 response. Tests submit valid gzip and gzip with trailing bytes, then confirm the server still responds to normal requests.
-- Updated the existing Puppeteer override from 25.6.0 to 25.16.0. Its supported chromium-bidi 157.0.8090-0 dependency uses Zod 4.6.7. The old chromium-bidi parser relied on Zod v3's error.errors API, so forcing Zod v4 into the old dependency was avoided.
-- Kept whatsapp-web.js 1.34.7, Chrome settings, and the original backend/.wwebjs_auth path. Imports and synthetic protocol validation passed offline; live WhatsApp compatibility must be checked by the user.
-- Refreshed package-lock.json with dependency lifecycle scripts disabled. No Chrome/browser download or WhatsApp initialization was performed. Node >=22.12.0 is declared to match Puppeteer's requirement.
-- Final online npm audit --json --ignore-scripts: zero known vulnerabilities across all severities. This is a point-in-time registry advisory check, not proof of complete security.
 
-No audit fix --force or unsupported major Zod override was used.
-
-## Existing protections and remaining boundaries
 
 
 
