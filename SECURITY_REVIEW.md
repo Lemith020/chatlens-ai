@@ -45,11 +45,7 @@ Do not share the rendered login QR, backend/.wwebjs_auth, cache/browser profiles
 
 ## Before publication
 
-1. Historical group-name disclosure is accepted by the user. No Git history was rewritten. Group names alone do not confer login access; sessions and QR codes remain sensitive.
-2. Dependency advisories were addressed with the targeted updates above. The user must rerun live status/group/message and saved-session tests after the browser dependency update.
-3. Check the exact staged diff and file list before committing. Keep sessions, caches, secrets, exports, screenshots, private logs, and databases outside the published artifacts.
-4. Remember Git commit author names/emails are also published with history. Existing GitHub remote contents, other clones, deleted/unreachable history, Git LFS, releases, Actions artifacts, and repository access settings were not verified.
-5. If a session/QR was ever shared elsewhere, revoke the affected linked device from the phone. No exposed session was identified in this local review.
+
 
 
 
