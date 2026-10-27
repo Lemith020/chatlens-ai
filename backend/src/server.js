@@ -41,4 +41,3 @@ module.exports = function startServer(app, whatsapp, onFailure = () => {}, port 
   return { server, shutdown, getFailure: () => primaryFailure };
 };
 
-//check  
