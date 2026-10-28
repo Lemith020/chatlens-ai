@@ -1,5 +1,6 @@
 <script setup>
 import logo from '../../assets/logo.jpg'
+import ConnectionStatus from '../connection/ConnectionStatus.vue'
 
 defineProps({
   isDark: {
@@ -23,6 +24,7 @@ defineEmits(['toggle-theme'])
     </div>
 
     <div class="header-actions">
+        <ConnectionStatus />
       <span class="local-badge">Local processing</span>
 
       <button
