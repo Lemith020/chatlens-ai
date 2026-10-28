@@ -1,18 +1,53 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import AppHeader from './components/layout/AppHeader.vue'
+import { getConnectionStatus } from './services/api'
 
 const isDark = ref(false)
+const connectionStatus = ref('not_checked')
+const statusError = ref('')
+
+const statusController = new AbortController()
+
+onMounted(async () => {
+  try {
+    const data = await getConnectionStatus({
+      signal: statusController.signal,
+    })
+
+    // Confirm this field matches your backend response.
+    const status = data.whatsappStatus
+
+    if (typeof status !== 'string') {
+      throw new Error('Unexpected status response format.')
+    }
+
+    connectionStatus.value = status
+  } catch (error) {
+    if (error.name === 'AbortError') return
+
+    connectionStatus.value = 'error'
+    statusError.value = error.message
+  }
+})
+
+onUnmounted(() => {
+  statusController.abort()
+})
 </script>
 
 <template>
   <div class="dashboard" :class="{ dark: isDark }">
     <AppHeader
-      :is-dark="isDark"
-      @toggle-theme="isDark = !isDark"
+  :is-dark="isDark"
+  :connection-status="connectionStatus"
+  @toggle-theme="isDark = !isDark"
     />
 
     <main class="main">
+      <p v-if="statusError" class="notice" role="alert">
+  {{ statusError }}
+</p>
       <section class="intro">
         <div>
           <p class="eyebrow">YOUR CONVERSATION WORKSPACE</p>

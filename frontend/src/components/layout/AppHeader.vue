@@ -7,6 +7,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  connectionStatus: {
+    type: String,
+    default: 'not_checked',
+  },
 })
 
 defineEmits(['toggle-theme'])
@@ -24,7 +28,7 @@ defineEmits(['toggle-theme'])
     </div>
 
     <div class="header-actions">
-        <ConnectionStatus />
+        <ConnectionStatus :status="connectionStatus" />
       <span class="local-badge">Local processing</span>
 
       <button
