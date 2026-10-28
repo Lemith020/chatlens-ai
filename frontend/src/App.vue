@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import logo from './assets/logo.jpg'
 
 const isDark = ref(false)
 </script>
