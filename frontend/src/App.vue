@@ -1,35 +1,16 @@
 <script setup>
 import { ref } from 'vue'
-import logo from './assets/logo.jpg'
+import AppHeader from './components/layout/AppHeader.vue'
 
 const isDark = ref(false)
 </script>
 
 <template>
   <div class="dashboard" :class="{ dark: isDark }">
-    <header class="header">
-      <div class="brand">
-        <img class="brand-logo" :src="logo" alt="" />
-
-        <div>
-          <h1>ChatLens AI</h1>
-          <p>Less noise. More clarity.</p>
-        </div>
-      </div>
-
-      <div class="header-actions">
-        <span class="local-badge">Local processing</span>
-
-        <button
-          class="theme-button"
-          type="button"
-          :aria-pressed="isDark"
-          @click="isDark = !isDark"
-        >
-          {{ isDark ? '☀ Light mode' : '☾ Dark mode' }}
-        </button>
-      </div>
-    </header>
+    <AppHeader
+      :is-dark="isDark"
+      @toggle-theme="isDark = !isDark"
+    />
 
     <main class="main">
       <section class="intro">
@@ -190,11 +171,10 @@ const isDark = ref(false)
 }
 
 .dashboard,
-.dashboard * {
+.dashboard :deep(*) {
   box-sizing: border-box;
 }
 
-h1,
 h2,
 h3,
 h4,
@@ -210,73 +190,6 @@ input {
 button:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 4px;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 22px 40px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand,
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.brand-logo {
-  display: block;
-  width: 46px;
-  height: 46px;
-  object-fit: contain;
-  border-radius: 12px;
-  flex-shrink: 0;
-}
-
-.brand h1 {
-  font-size: 21px;
-  letter-spacing: -0.6px;
-}
-
-.brand p {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.local-badge,
-.preview-badge,
-.status-badge,
-.count {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.local-badge,
-.count {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.theme-button {
-  padding: 9px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.theme-button:hover {
-  background: var(--surface-soft);
 }
 
 .main {
@@ -313,6 +226,17 @@ button:focus-visible {
 }
 
 .preview-badge,
+.status-badge,
+.count {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preview-badge,
 .status-badge {
   background: var(--surface-soft);
   color: var(--muted);
@@ -321,6 +245,12 @@ button:focus-visible {
 
 .preview-badge {
   white-space: nowrap;
+}
+
+.count {
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .workspace {
@@ -354,10 +284,6 @@ button:focus-visible {
   margin-top: 5px;
   color: var(--muted);
   font-size: 12px;
-}
-
-.count {
-  flex-shrink: 0;
 }
 
 .search-label {
@@ -520,17 +446,6 @@ button:focus-visible {
 }
 
 @media (max-width: 720px) {
-  .header {
-    flex-wrap: wrap;
-    padding: 18px;
-  }
-
-  .header-actions {
-    flex-wrap: wrap;
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .main {
     padding: 26px 16px;
   }
