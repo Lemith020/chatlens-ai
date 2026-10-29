@@ -4,4 +4,3 @@ import App from './App.vue'
 
 createApp(App).mount('#app')
 
-//check if the user is logged in
