@@ -1,14 +1,17 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
 import AppHeader from './components/layout/AppHeader.vue'
-import { getConnectionStatus } from './services/api'
+import { getConnectionStatus, getGroups } from './services/api'
 import GroupSelector from './components/groups/GroupSelector.vue'
+
 
 const isDark = ref(false)
 const connectionStatus = ref('not_checked')
 const statusError = ref('')
 const groups = ref([])
 const selectedGroupIds = ref([])
+const groupsLoading = ref(false)
+const groupsError = ref('')
 
 const statusController = new AbortController()
 
@@ -26,6 +29,9 @@ onMounted(async () => {
     }
 
     connectionStatus.value = status
+    if (status === 'ready') {
+  await loadGroups()
+}
   } catch (error) {
     if (error.name === 'AbortError') return
 
@@ -37,6 +43,33 @@ onMounted(async () => {
 onUnmounted(() => {
   statusController.abort()
 })
+
+async function loadGroups() {
+  if (connectionStatus.value !== 'ready' || groupsLoading.value) return
+
+  groupsLoading.value = true
+  groupsError.value = ''
+
+  try {
+    const loadedGroups = await getGroups({
+      signal: statusController.signal,
+    })
+
+    groups.value = loadedGroups
+
+    const availableIds = new Set(loadedGroups.map((group) => group.id))
+
+    selectedGroupIds.value = selectedGroupIds.value.filter((id) =>
+      availableIds.has(id),
+    )
+  } catch (error) {
+    if (error.name === 'AbortError') return
+
+    groupsError.value = error.message
+  } finally {
+    groupsLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -68,6 +101,9 @@ onUnmounted(() => {
           v-model="selectedGroupIds"
           :groups="groups"
           :ready="connectionStatus === 'ready'"
+          :loading="groupsLoading"
+          :error="groupsError"
+          @retry="loadGroups"
         />
 
         <section class="panel content-panel">
