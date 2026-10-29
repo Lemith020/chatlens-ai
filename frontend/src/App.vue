@@ -115,6 +115,7 @@ async function loadMessages(groupIds) {
           groupId,
           groupName: group?.name || 'Unnamed group',
           messages: data.messages,
+          history: data.history,
           error: '',
         })
       } catch (error) {
@@ -245,12 +246,17 @@ function formatMessageTime(timestamp) {
             {{ result.error }} Press Load messages to try again.
           </p>
 
+          <p v-else-if="result.history?.reason === 'history_unavailable'" class="result-note" role="status">
+            History is unavailable. Any returned messages are partial. Press Load messages to retry.
+          </p>
+          <p v-else-if="result.history?.reason === 'scan_limit'" class="result-note" role="status">
+            Search limits reached. Results may be incomplete.
+          </p>
           <p v-else-if="result.messages.length === 0" class="result-note">
-            No text messages were returned within the available history
-            and search limits.
+            No text messages were returned by this successful request.
           </p>
 
-          <template v-else>
+          <template v-if="!result.error">
             <article
               v-for="(message, index) in result.messages"
               :key="message.id || index"

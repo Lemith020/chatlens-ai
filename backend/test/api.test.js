@@ -10,12 +10,13 @@ const startServer = require('../src/server');
 const a = '123@g.us', b = '456@g.us';
 const message = (n, type = 'chat', body = 'Dummy ' + n) => ({ id: { _serialized: 'm' + n, fromMe: false }, t: n, type, body });
 class Chat {
-  constructor(client, data) { this.id = data.id; }
-  fetchMessages() { throw new Error('Unbounded library method must not be used'); }
+  constructor(client, data) { this.id = data.id; this.client = client; }
+  async fetchMessages(options) { assert.equal(options, undefined); return (this.client.histories[this.id._serialized]?.initial || []).map((m) => ({ ...m, timestamp: m.t })); }
 }
 function fakeClient(histories = {}) {
   const client = new EventEmitter();
   client.calls = [];
+  client.histories = histories;
   client.destroyed = 0;
   client.initialize = async () => {};
   client.destroy = async () => { client.destroyed++; };
@@ -23,7 +24,7 @@ function fakeClient(histories = {}) {
     client[name] = () => { throw new Error('Forbidden mutation/UI method: ' + name); };
   }
   client.pupPage = new EventEmitter();
-  client.pupPage.evaluate = async (fn, id) => {
+  client.pupPage.evaluate = async (fn, id, initial, remaining) => {
     const fixture = histories[id] || { initial: [], batches: [] };
     let index = 0;
     const model = { msgs: { getModelsArray: () => fixture.initial || [] } };
@@ -53,7 +54,7 @@ function fakeClient(histories = {}) {
         },
       },
     };
-    return JSON.parse(JSON.stringify(await vm.runInNewContext('(' + fn.toString() + ')', context)(id)));
+    return JSON.parse(JSON.stringify(await vm.runInNewContext('(' + fn.toString() + ')', context)(id, initial, remaining)));
   };
   return client;
 }
@@ -148,9 +149,8 @@ test('overlapping loads stop without progress and malformed IDs cannot loop', as
   assert.equal(fixture.loads, 1);
   assert.equal(result.history.reason, 'history_unavailable');
   const bad = { initial: [{ type: 'chat', body: 'Dummy' }], batches: [[{ type: 'chat', body: 'Dummy' }]] };
-  const invalid = await createReader(fakeClient({ [a]: bad }), Chat)(a);
-  assert.equal(invalid.history.scanned, 0);
-  assert.equal(bad.loads, 1);
+  await assert.rejects(createReader(fakeClient({ [a]: bad }), Chat)(a));
+  assert.equal(bad.loads, undefined);
 });
 
 test('unavailable chat and history load errors are distinguished', async (t) => {

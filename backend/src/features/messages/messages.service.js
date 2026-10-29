@@ -23,7 +23,10 @@ module.exports = function createMessagesService(groups, whatsapp, readHistory) {
           whatsapp.requireReady();
           let result;
           try { result = await readHistory(groupId); }
-          catch { throw apiError(502, 'MESSAGE_FETCH_FAILED', 'Message history could not be fetched.'); }
+          catch (cause) {
+            // Preserve the cause for internal diagnostics; the HTTP handler only exposes safe fields.
+            throw Object.assign(apiError(502, 'MESSAGE_FETCH_FAILED', 'Message history could not be fetched.'), { cause });
+          }
           results.push({ groupId, ...result });
         } catch (error) {
           if (!multiple) throw error;
