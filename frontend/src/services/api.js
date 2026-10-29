@@ -36,3 +36,30 @@ export async function getGroups({ signal } = {}) {
 
   return data.groups
 }
+
+export async function getGroupMessages(groupId, { signal } = {}) {
+  const encodedId = encodeURIComponent(groupId)
+
+  const response = await fetch(`/api/groups/${encodedId}/messages`, {
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Messages request failed (${response.status}).`)
+  }
+
+  const data = await response.json()
+
+  if (!Array.isArray(data.messages)) {
+    throw new Error('Unexpected messages response format.')
+  }
+
+  return {
+    messages: data.messages,
+    history: data.history,
+  }
+}
