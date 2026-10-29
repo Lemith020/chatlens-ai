@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
 import AppHeader from './components/layout/AppHeader.vue'
-import { getConnectionStatus, getGroups } from './services/api'
+import {getConnectionStatus,getGroups,getGroupMessages,} from './services/api'
 import GroupSelector from './components/groups/GroupSelector.vue'
 
 
@@ -12,6 +12,11 @@ const groups = ref([])
 const selectedGroupIds = ref([])
 const groupsLoading = ref(false)
 const groupsError = ref('')
+
+const messagesLoading = ref(false)
+const messageResults = ref([])
+const messagesError = ref('')
+const hasLoadedMessages = ref(false)
 
 const statusController = new AbortController()
 
@@ -70,6 +75,90 @@ async function loadGroups() {
     groupsLoading.value = false
   }
 }
+
+async function loadMessages(groupIds) {
+  if (connectionStatus.value !== 'ready' || messagesLoading.value) return
+
+  const uniqueIds = Array.isArray(groupIds)
+    ? [...new Set(groupIds)]
+    : []
+
+  const availableIds = new Set(groups.value.map((group) => group.id))
+
+  if (
+    uniqueIds.length === 0 ||
+    uniqueIds.length > 5 ||
+    uniqueIds.some((id) => !availableIds.has(id))
+  ) {
+    messagesError.value = 'Please select between one and five available groups.'
+    return
+  }
+
+  messagesLoading.value = true
+  messagesError.value = ''
+  messageResults.value = []
+  hasLoadedMessages.value = false
+
+  try {
+    const results = []
+
+    // Fetch one group at a time to avoid overlapping history loads.
+    for (const groupId of uniqueIds) {
+      const group = groups.value.find((item) => item.id === groupId)
+
+      try {
+        const data = await getGroupMessages(groupId, {
+          signal: statusController.signal,
+        })
+
+        results.push({
+          groupId,
+          groupName: group?.name || 'Unnamed group',
+          messages: data.messages,
+          error: '',
+        })
+      } catch (error) {
+        if (error.name === 'AbortError') return
+
+        results.push({
+          groupId,
+          groupName: group?.name || 'Unnamed group',
+          messages: [],
+          error: error.message,
+        })
+      }
+    }
+
+    messageResults.value = results
+    hasLoadedMessages.value = true
+  } finally {
+    messagesLoading.value = false
+  }
+}
+
+function formatMessageTime(timestamp) {
+  if (timestamp === null || timestamp === undefined || timestamp === '') {
+    return 'Time unavailable'
+  }
+
+  const value =
+    typeof timestamp === 'string' && /^\d+(\.\d+)?$/.test(timestamp)
+      ? Number(timestamp)
+      : timestamp
+
+  const date =
+    typeof value === 'number'
+      ? new Date(value < 1e12 ? value * 1000 : value)
+      : new Date(value)
+
+  return Number.isNaN(date.getTime())
+    ? 'Time unavailable'
+    : date.toLocaleString()
+}
+
+
+
+
 </script>
 
 <template>
@@ -102,33 +191,86 @@ async function loadGroups() {
           :groups="groups"
           :ready="connectionStatus === 'ready'"
           :loading="groupsLoading"
+          :messages-loading="messagesLoading"
           :error="groupsError"
           @retry="loadGroups"
+          @load-messages="loadMessages"
         />
+<section class="panel content-panel" :aria-busy="messagesLoading">
+  <div class="panel-heading content-heading">
+    <div>
+      <h3>Recent messages</h3>
+      <p>Recent text messages — up to 10 per group.</p>
+    </div>
+  </div>
 
-        <section class="panel content-panel">
-          <div class="panel-heading content-heading">
-            <div>
-              <h3>Recent messages</h3>
-              <p>Recent text messages — up to 10 per group.</p>
-            </div>
+  <p v-if="messagesError" class="notice" role="alert">
+    {{ messagesError }}
+  </p>
 
-            <span class="status-badge">API not connected</span>
+  <div
+    v-if="messagesLoading"
+    class="empty-state messages-empty"
+    role="status"
+  >
+    <div class="empty-icon" aria-hidden="true">≡</div>
+    <h4>Loading messages…</h4>
+    <p>Checking the selected groups. History loading may take some time.</p>
+  </div>
+
+  <div
+    v-else-if="!hasLoadedMessages"
+    class="empty-state messages-empty"
+  >
+    <div class="empty-icon" aria-hidden="true">≡</div>
+    <h4>Select your conversations</h4>
+    <p>Choose groups and press Load messages.</p>
+  </div>
+
+  <div v-else class="message-results">
+        <section
+          v-for="result in messageResults"
+          :key="result.groupId"
+          class="group-result"
+        >
+          <div class="result-heading">
+            <h4>{{ result.groupName }}</h4>
+
+            <span v-if="!result.error" class="count">
+              {{ result.messages.length }} messages
+            </span>
           </div>
 
-          <div class="empty-state messages-empty">
-            <div class="empty-icon" aria-hidden="true">≡</div>
-            <h4>Your workspace is ready</h4>
-            <p>
-              Select a group and load its messages to start reviewing
-              the conversation.
-            </p>
-          </div>
+          <p v-if="result.error" class="notice" role="alert">
+            {{ result.error }} Press Load messages to try again.
+          </p>
 
-          <div class="notice">
-            Recent messages are not necessarily unread messages.
-          </div>
+          <p v-else-if="result.messages.length === 0" class="result-note">
+            No text messages were returned within the available history
+            and search limits.
+          </p>
+
+          <template v-else>
+            <article
+              v-for="(message, index) in result.messages"
+              :key="message.id || index"
+              class="message-card"
+            >
+              <p class="message-time">
+                {{ formatMessageTime(message.timestamp) }}
+              </p>
+
+              <p class="message-body">{{ message.body }}</p>
+            </article>
+          </template>
         </section>
+      </div>
+
+      <div class="notice">
+        Recent messages are not necessarily unread messages.
+        Results may be limited by available history and backend scan limits.
+      </div>
+    </section>
 
         <section class="panel analysis-panel">
           <div class="panel-heading">
@@ -512,5 +654,56 @@ button:focus-visible {
   .group-empty {
     min-height: 180px;
   }
+}
+
+.message-results {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-height: 650px;
+  overflow-y: auto;
+}
+
+.group-result {
+  min-width: 0;
+}
+
+.result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.result-heading h4 {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.result-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.message-card {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.message-time {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.message-body {
+  color: var(--text);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>
