@@ -16,7 +16,7 @@ onMounted(async () => {
     })
 
     // Confirm this field matches your backend response.
-    const status = data.whatsappStatus
+    const status = data.whatsapp?.status
 
     if (typeof status !== 'string') {
       throw new Error('Unexpected status response format.')
