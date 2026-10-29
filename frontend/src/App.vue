@@ -2,10 +2,13 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import AppHeader from './components/layout/AppHeader.vue'
 import { getConnectionStatus } from './services/api'
+import GroupSelector from './components/groups/GroupSelector.vue'
 
 const isDark = ref(false)
 const connectionStatus = ref('not_checked')
 const statusError = ref('')
+const groups = ref([])
+const selectedGroupIds = ref([])
 
 const statusController = new AbortController()
 
@@ -61,42 +64,11 @@ onUnmounted(() => {
       </section>
 
       <div class="workspace">
-        <aside class="panel groups-panel">
-          <div class="panel-heading">
-            <div>
-              <h3>Your groups</h3>
-              <p>Select the conversations to review.</p>
-            </div>
-
-            <span class="count">0 / 5</span>
-          </div>
-
-          <label class="search-label" for="group-search">
-            Search groups
-          </label>
-
-          <input
-            id="group-search"
-            class="search-input"
-            type="search"
-            placeholder="Search groups..."
-            disabled
-          />
-
-          <div class="empty-state group-empty">
-            <div class="empty-icon" aria-hidden="true">◎</div>
-            <h4>No groups loaded</h4>
-            <p>
-              Your WhatsApp groups will appear here after we connect the API.
-            </p>
-          </div>
-
-          <button class="primary-button" type="button" disabled>
-            Load messages
-          </button>
-
-          <p class="helper-text">Select up to five groups.</p>
-        </aside>
+        <GroupSelector
+          v-model="selectedGroupIds"
+          :groups="groups"
+          :ready="connectionStatus === 'ready'"
+        />
 
         <section class="panel content-panel">
           <div class="panel-heading content-heading">
