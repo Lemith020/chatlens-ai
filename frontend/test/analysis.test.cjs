@@ -127,7 +127,7 @@ test('multilingual displayed snapshot reaches mocked Ollama unchanged through HT
   const createApp = require('../../backend/src/app');
   const createService = require('../../backend/src/features/analysis/analysis.service');
   const { analyzeMessages } = await import('../src/services/api.js');
-  const groups = syntheticGroups();
+  const groups = syntheticGroups().map((g, index) => ({ ...g, messages: g.messages.map((m) => ({ ...m, id: `false_900000000000-1000000000@g.us_COMPLEX_${index}_900000000001@c.us` })) }));
   // Expected values and assertions use public fixtures only. No runtime diagnostics.
   const expected = groups.map((g, index) => ({
     summary: `Synthetic summary ${index + 1}`,
@@ -142,11 +142,13 @@ test('multilingual displayed snapshot reaches mocked Ollama unchanged through HT
     assert.equal(payload.stream, false);
     assert.equal(payload.think, false);
     assert.deepEqual(payload.messages.map((m) => m.role), ['system', 'user']);
-    const projected = groups[index].messages.map(({ id, body }) => ({ id, body }));
+    const projected = groups[index].messages.map(({ body }, i) => ({ id: `m${i + 1}`, body }));
     assert.deepEqual(JSON.parse(payload.messages[1].content), { conversationData: projected });
     // This includes English whitespace/newlines and Sinhala Unicode unchanged.
     assert.deepEqual(JSON.parse(payload.messages[1].content).conversationData.map((m) => m.body), groups[index].messages.map((m) => m.body));
-    return new Response(JSON.stringify({ done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(expected[index]) } }));
+    for (const field of ['importantUpdates', 'tasks']) assert.deepEqual(payload.format.properties[field].items.properties.messageIds.items.enum, ['m1']);
+    const modelOutput = { ...expected[index], importantUpdates: expected[index].importantUpdates.map((item) => ({ ...item, messageIds: ['m1'] })), tasks: expected[index].tasks.map((item) => ({ ...item, messageIds: ['m1'] })) };
+    return new Response(JSON.stringify({ done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(modelOutput) } }));
   } });
   const forbidden = new Proxy({}, { get() { throw new Error('Unexpected WhatsApp access'); } });
   const server = createApp({ client: forbidden, whatsapp: forbidden, Chat: class {}, analysis }).listen(0, '127.0.0.1');
