@@ -52,7 +52,7 @@ module.exports = function createOllamaClient({ fetchImpl = globalThis.fetch, mod
         }
         let envelope;
         try { envelope = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw invalid(); }
-        if (envelope?.done !== true || envelope.message?.role !== 'assistant' || typeof envelope.message.content !== 'string'
+        if (envelope?.done !== true || envelope.done_reason !== 'stop' || envelope.message?.role !== 'assistant' || typeof envelope.message.content !== 'string'
             || Buffer.byteLength(envelope.message.content) > 32768) throw invalid();
         try { return JSON.parse(envelope.message.content); } catch { throw invalid(); }
       };

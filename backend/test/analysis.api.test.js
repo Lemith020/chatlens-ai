@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const createApp = require('../src/app');
+const createAnalysisService = require('../src/features/analysis/analysis.service');
 const snapshot = () => ({ groups: [{ groupId: '123@g.us', messages: [{ id: 'm1', groupId: '123@g.us', timestamp: 1, type: 'chat', body: 'Synthetic task tomorrow.', fromMe: false }], history: { reason: 'history_unavailable', scanned: 1, loads: 1 } }] });
 async function api(t, analyze) {
   const forbidden = new Proxy({}, { get() { throw new Error('WhatsApp must not be accessed'); } });
@@ -65,6 +66,18 @@ test('analysis lock rejects overlap and releases after failures; unknown errors 
   assert.equal(JSON.stringify(result).includes('PRIVATE_SENTINEL'), false);
   assert.equal((await request()).status, 207);
   assert.equal(calls, 2);
+});
+
+test('empty summaries and token-limited completions become per-group errors rather than success', async (t) => {
+  for (const [summary, doneReason] of [['', 'stop'], ['Valid-looking but truncated summary.', 'length']]) {
+    const service = createAnalysisService({ fetchImpl: async () => new Response(JSON.stringify({ done: true, done_reason: doneReason,
+      message: { role: 'assistant', content: JSON.stringify({ summary, importantUpdates: [], tasks: [] }) } })) });
+    const request = await api(t, service.analyze);
+    const { status, data } = await request();
+    assert.equal(status, 207);
+    assert.equal(data.results[0].error.code, 'INVALID_MODEL_OUTPUT');
+    assert.equal(Object.hasOwn(data.results[0], 'analysis'), false);
+  }
 });
 test('analysis keeps local protections and uses a bounded route-specific JSON budget', async (t) => {
   const request = await api(t, async () => ({ summary: '', importantUpdates: [], tasks: [] }));

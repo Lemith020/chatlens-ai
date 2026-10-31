@@ -107,3 +107,88 @@ test('dev proxy translates only the exact local UI Origin', async () => {
     assert.deepEqual(headers, origin === 'http://127.0.0.1:5173' ? { Origin: 'http://127.0.0.1:3001' } : {});
   }
 });
+
+test('empty summary is reported honestly without hiding findings, errors, or valid summaries', async () => {
+  const html = await view({ analysisResults: [
+    { groupId: '123@g.us', analysis: { summary: '', importantUpdates: [{ text: 'Survey is open.', messageIds: ['m1'] }], tasks: [] } },
+    { groupId: '456@g.us', analysis: { summary: 'A substantive summary.', importantUpdates: [], tasks: [] } },
+    { groupId: '789@g.us', error: { message: 'Ollama returned invalid analysis.' } },
+  ] });
+  assert.match(html, /Ollama returned an empty summary/);
+  assert.match(html, /does not mean the messages lack substantive content/);
+  assert.match(html, /Survey is open/);
+  assert.match(html, /A substantive summary/);
+  assert.match(html, /Ollama returned invalid analysis/);
+  assert.doesNotMatch(html, /No substantive discussion/);
+});
+
+test('multilingual displayed snapshot reaches mocked Ollama unchanged through HTTP and returns to the correct Vue group', async (t) => {
+  const { syntheticGroups } = require('../../backend/scripts/analysis-synthetic');
+  const createApp = require('../../backend/src/app');
+  const createService = require('../../backend/src/features/analysis/analysis.service');
+  const { analyzeMessages } = await import('../src/services/api.js');
+  const groups = syntheticGroups();
+  // Expected values and assertions use public fixtures only. No runtime diagnostics.
+  const expected = groups.map((g, index) => ({
+    summary: `Synthetic summary ${index + 1}`,
+    importantUpdates: [{ text: `Synthetic update ${index + 1}`, messageIds: [g.messages[0].id] }],
+    tasks: [{ text: `Synthetic task ${index + 1}`, messageIds: [g.messages[0].id], deadlineText: null }],
+  }));
+  let ollamaCalls = 0;
+  const analysis = createService({ fetchImpl: async (url, options) => {
+    assert.equal(url, 'http://127.0.0.1:11434/api/chat');
+    const payload = JSON.parse(options.body);
+    const index = ollamaCalls++;
+    assert.equal(payload.stream, false);
+    assert.equal(payload.think, false);
+    assert.deepEqual(payload.messages.map((m) => m.role), ['system', 'user']);
+    const projected = groups[index].messages.map(({ id, body }) => ({ id, body }));
+    assert.deepEqual(JSON.parse(payload.messages[1].content), { conversationData: projected });
+    // This includes English whitespace/newlines and Sinhala Unicode unchanged.
+    assert.deepEqual(JSON.parse(payload.messages[1].content).conversationData.map((m) => m.body), groups[index].messages.map((m) => m.body));
+    return new Response(JSON.stringify({ done: true, done_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(expected[index]) } }));
+  } });
+  const forbidden = new Proxy({}, { get() { throw new Error('Unexpected WhatsApp access'); } });
+  const server = createApp({ client: forbidden, whatsapp: forbidden, Chat: class {}, analysis }).listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  const realFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
+  let apiCalls = 0;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, '/api/analysis');
+    assert.deepEqual(JSON.parse(options.body), { groups });
+    apiCalls++;
+    return realFetch('http://127.0.0.1:' + server.address().port + url, options);
+  };
+  const s = await state(analyzeMessages);
+  t.after(s.stop);
+  s.messages.value = groups.map((g, index) => ({ ...g, groupName: `Synthetic group ${index + 1}`, error: '' }));
+  s.selection.value = groups.map((g) => g.groupId);
+  await s.analyzeDisplayed();
+  assert.equal(apiCalls, 1);
+  assert.equal(ollamaCalls, 3);
+  assert.equal(s.analysisError.value, '');
+  const results = s.analysisResults.value;
+  assert.equal(results.length, 3);
+  for (let index = 0; index < groups.length; index++) {
+    assert.equal(results[index].groupId, groups[index].groupId);
+    assert.deepEqual(results[index].history, groups[index].history);
+    assert.deepEqual(results[index].analysis, expected[index]);
+  }
+  // Reverse response order to prove the UI resolves names/sources by ID, not index.
+  const html = await view({ messageResults: s.messages.value, analysisResults: [...results].reverse(),
+    groupName: (id) => s.messages.value.find((g) => g.groupId === id).groupName,
+    sourceMessage: (groupId, id) => s.messages.value.find((g) => g.groupId === groupId).messages.find((m) => m.id === id).body,
+  });
+  const sections = html.split('class="group-result analysis-result"').slice(1);
+  assert.equal(sections.length, 3);
+  for (let position = 0; position < 3; position++) {
+    const index = 2 - position;
+    assert.ok(sections[position].includes(`Synthetic group ${index + 1}`));
+    assert.ok(sections[position].includes(expected[index].summary));
+    assert.ok(sections[position].includes(groups[index].messages[0].body));
+    assert.ok(sections[position].includes(groups[index].messages[0].id));
+  }
+  assert.doesNotMatch(html, /No substantive discussion|Ollama returned an empty summary/);
+});

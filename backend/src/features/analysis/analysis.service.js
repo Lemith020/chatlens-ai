@@ -22,7 +22,7 @@ module.exports = function createAnalysisService(options = {}) {
       if (Buffer.byteLength(JSON.stringify(data)) > limits.inputBytes) throw badInput();
       const output = await client.chat(data);
       const invalid = () => apiError(502, 'INVALID_MODEL_OUTPUT', 'Ollama returned invalid analysis.');
-      if (!keys(output, ['summary', 'importantUpdates', 'tasks']) || typeof output.summary !== 'string' || output.summary.length > 4000
+      if (!keys(output, ['summary', 'importantUpdates', 'tasks']) || !text(output.summary, 4000)
           || Buffer.byteLength(JSON.stringify(output)) > limits.outputBytes) throw invalid();
       for (const field of ['importantUpdates', 'tasks']) {
         const task = field === 'tasks';

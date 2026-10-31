@@ -314,7 +314,8 @@ function formatMessageTime(timestamp) {
             <p v-else-if="result.skipped" class="result-note">Skipped: no retrieved messages.</p>
             <template v-else-if="result.analysis">
               <h4>Summary</h4>
-              <p class="message-body">{{ result.analysis.summary || 'No substantive discussion.' }}</p>
+              <p v-if="result.analysis.summary.trim()" class="message-body">{{ result.analysis.summary }}</p>
+              <p v-else class="result-note" role="status">Ollama returned an empty summary. This does not mean the messages lack substantive content. Review the retrieved messages and other findings.</p>
               <template v-for="field in ['importantUpdates', 'tasks']" :key="field">
                 <h4>{{ field === 'tasks' ? 'Tasks and deadlines' : 'Important updates' }}</h4>
                 <p v-if="!result.analysis[field].length" class="result-note">None identified.</p>
