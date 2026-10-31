@@ -1,6 +1,6 @@
 # ChatLens AI
 
-A local web app for reviewing selected WhatsApp group conversations. The core Express backend is implemented. React dashboard, SQLite persistence, Ollama analysis, summaries, tasks, and AI progress tracking are planned and are not part of this change.
+A local web app for reviewing selected WhatsApp group conversations. The core Express backend and a standalone local Ollama analysis service are implemented. Analysis has no API route or frontend/WhatsApp wiring yet. SQLite persistence and AI progress tracking remain planned.
 
 ## Verified progress
 
@@ -23,7 +23,9 @@ The user previously verified QR login, saved-session reuse, group listing, and f
 | backend/src/features/messages/messages.history.js | Bounded WhatsApp compatibility adapter; text filtering and history metadata. |
 | backend/src/middleware | Local Host/Origin protection and safe error responses. |
 | backend/test/api.test.js | Synthetic offline HTTP, browser-adapter, lifecycle, and protection tests. |
-| backend/src/database, backend/src/features/analysis, backend/src/integrations | Placeholders for planned storage and AI features. |
+| backend/src/features/analysis | Standalone analysis service, validation, and structured prompt/schema; no route. |
+| backend/src/integrations/ollama.client.js | Bounded, loopback-only Ollama chat adapter using built-in fetch. |
+| backend/src/database | Placeholder for planned storage. |
 | frontend | Reserved for the planned dashboard; unchanged. |
 
 ## Setup and startup
@@ -215,4 +217,39 @@ Every response uses Cache-Control: no-store. Host must exactly match 127.0.0.1:<
 
 No static files are served. Keep backend/.wwebjs_auth/, .wwebjs_cache/, node_modules/, data/, logs/, .env secrets, chat exports, databases, private logs, real-message screenshots, and session files outside Git. Existing .gitignore covers generated sessions, caches, data, secrets, and logs. Source, tests, README, package manifests, and lock file are the project artifacts; this task does not stage, commit, or push anything.
 
-WhatsApp still requires network access. Local operation is not offline WhatsApp. Future local AI processing is planned, not implemented. SQLite would not automatically encrypt stored data. ChatLens AI is independent of WhatsApp/Meta and uses an unofficial integration that can break and may carry account restriction risks.
+WhatsApp still requires network access. Local operation is not offline WhatsApp. Local AI analysis is available only through the standalone service described below. SQLite would not automatically encrypt stored data. ChatLens AI is independent of WhatsApp/Meta and uses an unofficial integration that can break and may carry account restriction risks.
+
+## Local Ollama analysis service
+
+The service does not import the WhatsApp client, read sessions, store data, or register an API route. It calls only `http://127.0.0.1:11434/api/chat`, using Node's built-in `fetch`, `stream: false`, `think: false`, and a JSON schema in `format`. Redirects are rejected. There are no retries, cloud providers, or fallbacks. Ollama must already be running with the chosen model installed.
+
+The existing environment config pattern defaults `OLLAMA_MODEL` to `qwen3:4b`. Set it before loading the service, for example `$env:OLLAMA_MODEL = 'qwen3:4b'` in PowerShell. The URL cannot be configured. No dependency or lockfile changes are required.
+
+Exported CommonJS interfaces:
+
+~~~js
+const createAnalysisService = require('./backend/src/features/analysis/analysis.service');
+const analysis = createAnalysisService();
+const result = await analysis.analyze([
+  { id: 'dummy-1', body: 'Please send the draft tomorrow.' },
+]);
+// { summary: string,
+//   importantUpdates: [{ text: string, messageIds: string[] }],
+//   tasks: [{ text: string, messageIds: string[], deadlineText: string | null }] }
+~~~
+
+`createAnalysisService({ fetchImpl, model, timeoutMs })` supports injected fetch for offline tests. `analyze(messages)` accepts existing message records but sends only `id` and `body`. It validates 1–50 messages, unique nonblank IDs (at most 256 characters), nonblank bodies (at most 8,000 characters each), and at most 32,768 UTF-8 bytes of serialized projected input. `createAnalysisService.limits` exports these service limits.
+
+`createOllamaClient(options).chat(validatedMessages)` is the lower-level adapter used by the service; callers should use `analyze` for input and result validation. The adapter bounds the entire response envelope to 65,536 bytes while reading, and the JSON content to 32,768 bytes. The default request timeout is 60,000 ms, covers fetch and body reading, and aborts the request; injected timeout values must be integers from 1 to 120,000 ms.
+
+Results require exactly the documented fields. Summary is at most 4,000 characters; each findings array has at most 50 entries, with nonblank text of at most 2,000 characters and 1–50 unique references to supplied IDs. Every task requires `deadlineText`, either null or a nonblank phrase of at most 500 characters copied verbatim from a cited body. Relative phrases such as “tomorrow” stay as written. The system prompt treats all message bodies as untrusted conversation data and forbids obeying embedded instructions or inventing facts or dates. Schema/reference/deadline checks enforce structural constraints; generated summaries and task interpretations can still be inaccurate and need human review.
+
+Failures reject with safe Error fields (`code`, `message`, `status`, `isApiError`): `INVALID_ANALYSIS_INPUT` (400), `OLLAMA_UNAVAILABLE` (503), `OLLAMA_TIMEOUT` (504), `OLLAMA_MODEL_MISSING` (503, Ollama HTTP 404), or `INVALID_MODEL_OUTPUT` (502). Invalid factory configuration throws a fixed configuration error. Prompts, bodies, responses, and raw upstream errors are never logged or persisted by this integration.
+
+Focused offline tests from the project root:
+
+~~~powershell
+node --test backend/test/analysis.test.js
+~~~
+
+Run all offline backend regressions with `npm.cmd --prefix backend test`. These tests use fake messages and mocked Ollama fetch; they do not contact Ollama or run live WhatsApp.
