@@ -27,7 +27,6 @@ watch(selectedGroupIds, () => {
   hasLoadedMessages.value = false
 }, { deep: true, flush: 'sync' })
 const groupName = (id) => messageResults.value.find((g) => g.groupId === id)?.groupName || id
-const sourceMessage = (groupId, id) => messageResults.value.find((g) => g.groupId === groupId)?.messages.find((m) => m.id === id)?.body || 'Source unavailable'
 
 const statusController = new AbortController()
 
@@ -322,10 +321,6 @@ function formatMessageTime(timestamp) {
                 <article v-for="(item, index) in result.analysis[field]" :key="index" class="message-card">
                   <p class="message-body">{{ item.text }}</p>
                   <p v-if="field === 'tasks'" class="result-note">Deadline: {{ item.deadlineText === null ? 'Not stated' : item.deadlineText }}</p>
-                  <details v-for="id in item.messageIds" :key="id">
-                    <summary class="source-reference">View source: {{ id }}</summary>
-                    <p class="message-body">{{ sourceMessage(result.groupId, id) }}</p>
-                  </details>
                 </article>
               </template>
             </template>
@@ -337,7 +332,7 @@ function formatMessageTime(timestamp) {
             </button>
 
             <p class="helper-text">
-              Uses local Ollama. Review generated insights against their sources.
+              Uses local Ollama. Review generated insights against Recent messages.
             </p>
           </div>
         </section>
@@ -607,7 +602,6 @@ button:focus-visible {
 }
 .analysis-result { margin-bottom: 24px; overflow-wrap: anywhere; }
 .analysis-result h4 { margin: 12px 0 6px; }
-.source-reference { cursor: pointer; font-size: 12px; overflow-wrap: anywhere; }
 
 .insight-item {
   display: flex;

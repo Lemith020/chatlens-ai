@@ -67,12 +67,12 @@ async function view(overrides = {}) {
     groupsLoading: false, groupsError: '', messagesLoading: false, messagesError: '', hasLoadedMessages: true,
     messageResults: snapshot(), analysisLoading: false, analysisResults: [], analysisError: '', canAnalyze: true,
     analyzeDisplayed() {}, loadGroups() {}, loadMessages() {}, formatMessageTime: () => 'Time', groupName: () => 'Synthetic',
-    sourceMessage: () => snapshot()[0].messages[0].body, ...overrides,
+    ...overrides,
   }) });
   app.component('AppHeader', { render: () => null }); app.component('GroupSelector', { render: () => null });
   return renderToString(app);
 }
-test('Vue renders loading, per-group errors, partial history, tasks, deadlines and escaped sources', async () => {
+test('Vue preserves insight states and escaped text without source controls or previews', async () => {
   assert.match(await view({ analysisLoading: true, canAnalyze: false }), /Analyzing retrieved messages locally/);
   assert.match(await view({ analysisError: 'Ollama is unavailable.' }), /Ollama is unavailable/);
   const html = await view({ analysisResults: [
@@ -80,7 +80,10 @@ test('Vue renders loading, per-group errors, partial history, tasks, deadlines a
     { groupId: '456@g.us', history: { reason: 'history_unavailable' }, error: { message: 'Ollama request timed out.' } },
     { groupId: '789@g.us', skipped: 'empty_group' },
   ] });
-  for (const expected of ['Analysis of only the retrieved messages', 'Search limits reached', 'History is unavailable', 'Ollama request timed out.', 'Synthetic task', 'Deadline: tomorrow', 'Deadline: Not stated', 'View source: m1', 'Skipped: no retrieved messages.', '&lt;script&gt;', '&lt;img']) assert.ok(html.includes(expected), expected);
+  for (const expected of ['Analysis of only the retrieved messages', 'Search limits reached', 'History is unavailable', 'Ollama request timed out.', 'Synthetic task', 'Deadline: tomorrow', 'Deadline: Not stated', 'Skipped: no retrieved messages.', '&lt;script&gt;', '&lt;img']) assert.ok(html.includes(expected), expected);
+  const insights = html.split('AI insights')[1];
+  assert.doesNotMatch(insights, /View source|<details|<summary|<a\b|\bm1\b|&lt;img/);
+  assert.match(html.split('AI insights')[0], /&lt;img/); // Recent messages remain visible.
   assert.doesNotMatch(html, /<script>|<img/);
   assert.doesNotMatch(source, /v-html/);
 });
@@ -178,10 +181,9 @@ test('multilingual displayed snapshot reaches mocked Ollama unchanged through HT
     assert.deepEqual(results[index].history, groups[index].history);
     assert.deepEqual(results[index].analysis, expected[index]);
   }
-  // Reverse response order to prove the UI resolves names/sources by ID, not index.
+  // Reverse response order to prove the UI resolves group names by ID, not index.
   const html = await view({ messageResults: s.messages.value, analysisResults: [...results].reverse(),
     groupName: (id) => s.messages.value.find((g) => g.groupId === id).groupName,
-    sourceMessage: (groupId, id) => s.messages.value.find((g) => g.groupId === groupId).messages.find((m) => m.id === id).body,
   });
   const sections = html.split('class="group-result analysis-result"').slice(1);
   assert.equal(sections.length, 3);
@@ -189,8 +191,11 @@ test('multilingual displayed snapshot reaches mocked Ollama unchanged through HT
     const index = 2 - position;
     assert.ok(sections[position].includes(`Synthetic group ${index + 1}`));
     assert.ok(sections[position].includes(expected[index].summary));
-    assert.ok(sections[position].includes(groups[index].messages[0].body));
-    assert.ok(sections[position].includes(groups[index].messages[0].id));
+    assert.ok(sections[position].includes(expected[index].importantUpdates[0].text));
+    assert.ok(sections[position].includes(expected[index].tasks[0].text));
+    assert.equal(sections[position].includes(groups[index].messages[0].body), false);
+    assert.equal(sections[position].includes(groups[index].messages[0].id), false);
+    assert.ok(html.split('AI insights')[0].includes(groups[index].messages[0].body));
   }
   assert.doesNotMatch(html, /No substantive discussion|Ollama returned an empty summary/);
 });
