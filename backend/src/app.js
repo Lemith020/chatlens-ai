@@ -3,12 +3,13 @@ const createGroupsService = require('./features/groups/groups.service');
 const createMessagesService = require('./features/messages/messages.service');
 const createHistoryReader = require('./features/messages/messages.history');
 const { apiError, errorHandler } = require('./middleware/error-handler');
-module.exports = function createApp({ client, whatsapp, Chat = require('whatsapp-web.js').Chat }) {
+module.exports = function createApp({ client, whatsapp, Chat = require('whatsapp-web.js').Chat, analysis = require('./features/analysis/analysis.service')() }) {
   const app = express();
   const groups = createGroupsService(client, whatsapp);
   const messages = createMessagesService(groups, whatsapp, createHistoryReader(client, Chat));
   app.disable('x-powered-by');
   app.use(require('./middleware/local-api'));
+  app.use('/api/analysis', require('./features/analysis/analysis.routes')(analysis, groups.validateId));
   app.use(express.json({ limit: '4kb', strict: true, inflate: false }));
   app.use('/api', require('./features/whatsapp/whatsapp.routes')(whatsapp));
   app.use('/api/groups', require('./features/groups/groups.routes')(groups));

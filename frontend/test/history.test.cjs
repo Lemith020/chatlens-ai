@@ -14,6 +14,7 @@ async function view(history, messages = []) {
     isDark: false, connectionStatus: 'ready', statusError: '', groups: [], selectedGroupIds: [],
     groupsLoading: false, groupsError: '', messagesLoading: false, messagesError: '', hasLoadedMessages: true,
     messageResults: [{ groupId: 'synthetic', groupName: 'Synthetic', messages, history, error: '' }],
+    analysisLoading: false, analysisResults: [], analysisError: '', canAnalyze: false, analyzeDisplayed() {},
     formatMessageTime: () => 'Synthetic time', loadGroups() {}, loadMessages() {},
   }) });
   app.component('AppHeader', { render: () => null });

@@ -1,6 +1,6 @@
 # ChatLens AI
 
-A local web app for reviewing selected WhatsApp group conversations. The core Express backend and a standalone local Ollama analysis service are implemented. Analysis has no API route or frontend/WhatsApp wiring yet. SQLite persistence and AI progress tracking remain planned.
+A local web app for reviewing selected WhatsApp group conversations. The Express backend and Vue dashboard support local Ollama analysis of displayed message snapshots. SQLite persistence and AI progress tracking remain planned.
 
 ## Verified progress
 
@@ -12,7 +12,7 @@ The user previously verified QR login, saved-session reuse, group listing, and f
 | --- | --- |
 | backend/index.js | Small entry point, shared client setup, process signal handlers. |
 | backend/src/server.js | Loopback HTTP startup and idempotent shutdown; cleanup after startup/bind failure. |
-| backend/src/app.js | Express wiring, 4 KB JSON limit, routes, safe errors. |
+| backend/src/app.js | Express wiring, routes, safe errors; 4 KB JSON limit except the bounded analysis snapshot route. |
 | backend/src/config/index.js | Port, fixed 127.0.0.1 host, original session path and Chrome settings. |
 | backend/src/features/whatsapp/whatsapp.client.js | One client shared through Node module caching. |
 | backend/src/features/whatsapp/whatsapp.service.js | Connection status, QR display, bounded browser cleanup. |
@@ -23,10 +23,10 @@ The user previously verified QR login, saved-session reuse, group listing, and f
 | backend/src/features/messages/messages.history.js | Bounded WhatsApp compatibility adapter; text filtering and history metadata. |
 | backend/src/middleware | Local Host/Origin protection and safe error responses. |
 | backend/test/api.test.js | Synthetic offline HTTP, browser-adapter, lifecycle, and protection tests. |
-| backend/src/features/analysis | Standalone analysis service, validation, and structured prompt/schema; no route. |
+| backend/src/features/analysis | Analysis service, structured prompt/schema, and snapshot-only POST route. |
 | backend/src/integrations/ollama.client.js | Bounded, loopback-only Ollama chat adapter using built-in fetch. |
 | backend/src/database | Placeholder for planned storage. |
-| frontend | Reserved for the planned dashboard; unchanged. |
+| frontend | Vue dashboard, message loading, snapshot analysis, and source-message views. |
 
 ## Setup and startup
 
@@ -62,6 +62,7 @@ No separate selection endpoint or stored selection is needed: pass IDs returned 
 | GET /api/groups | Group metadata: id, name, unreadCount. No direct chats. |
 | GET /api/groups/:groupId/messages | groupId, messages, history for one group. |
 | POST /api/messages | JSON body with groupIds: 1 to 5 unique group IDs; returns results per group. |
+| POST /api/analysis | JSON body with groups: 1 to 5 displayed group snapshots; per-group local analysis, errors, or explicit empty-group skips. |
 
 Status example:
 
@@ -103,7 +104,7 @@ Multi-group request and partial response examples:
 
 Multi-group HTTP status is 200 if all groups succeed, 207 if any selected group fails (including when all fail). Inspect each result.error. Malformed whole requests fail before any content is fetched. Valid but missing IDs produce per-group GROUP_NOT_FOUND in batch responses, or HTTP 404 for a single group. No content is fetched from unselected IDs.
 
-Errors use { error: { code, message } }. Not ready: 503. Invalid ID/selection or JSON: 400. Missing route/group: 404. Wrong POST content type or compressed request body: 415. Compressed bodies are disabled before decompression. Body over 4 KB: 413. Message-fetch failure or timeout: 502. Overlapping message request: 429. Unexpected errors: generic 500. Raw library errors, stack traces, disconnect reasons, credentials, and message bodies are not logged or exposed through errors. Fetch failures are never silently converted to an empty success.
+Errors use { error: { code, message } }. Not ready: 503 for WhatsApp fetches. Invalid ID/selection or JSON: 400. Missing route/group: 404. Wrong POST content type or compressed request body: 415. Compressed bodies are disabled before decompression. Body over 4 KB (192 KB for analysis snapshots): 413. Message-fetch failure or timeout: 502. Overlapping message or analysis request: 429. Unexpected errors: generic 500. Analysis-specific per-group failures are described below. Raw library errors, stack traces, disconnect reasons, credentials, and message bodies are not logged or exposed through errors. Fetch failures are never silently converted to an empty success.
 
 ## History limits and compatibility
 
@@ -213,15 +214,15 @@ The 2026-10-24 security verification passed 28 offline tests and npm audit repor
 
 ## Local protection and privacy
 
-Every response uses Cache-Control: no-store. Host must exactly match 127.0.0.1:<actual API port>. Browser Origin, when present, must exactly match http://127.0.0.1:<port>; null and foreign origins and cross-site Fetch Metadata requests are rejected. Wildcard CORS is not enabled. A future dashboard needs same-origin API proxying; do not disable these checks to connect a separate development port. These protections are not authentication against other local programs.
+Every response uses Cache-Control: no-store. Host must exactly match 127.0.0.1:<actual API port>. Browser Origin, when present, must exactly match http://127.0.0.1:<port>; null and foreign origins and cross-site Fetch Metadata requests are rejected. Wildcard CORS is not enabled. The Vue dev server proxies /api to port 3001 and translates only its exact local Origin (http://127.0.0.1:5173) to the backend Origin. Foreign/null origins and cross-site metadata retain backend rejection. Use that exact local UI URL; do not disable backend protections. These protections are not authentication against other local programs.
 
 No static files are served. Keep backend/.wwebjs_auth/, .wwebjs_cache/, node_modules/, data/, logs/, .env secrets, chat exports, databases, private logs, real-message screenshots, and session files outside Git. Existing .gitignore covers generated sessions, caches, data, secrets, and logs. Source, tests, README, package manifests, and lock file are the project artifacts; this task does not stage, commit, or push anything.
 
-WhatsApp still requires network access. Local operation is not offline WhatsApp. Local AI analysis is available only through the standalone service described below. SQLite would not automatically encrypt stored data. ChatLens AI is independent of WhatsApp/Meta and uses an unofficial integration that can break and may carry account restriction risks.
+WhatsApp still requires network access. Local operation is not offline WhatsApp. Local AI analysis uses the service described below. SQLite would not automatically encrypt stored data. ChatLens AI is independent of WhatsApp/Meta and uses an unofficial integration that can break and may carry account restriction risks.
 
 ## Local Ollama analysis service
 
-The service does not import the WhatsApp client, read sessions, store data, or register an API route. It calls only `http://127.0.0.1:11434/api/chat`, using Node's built-in `fetch`, `stream: false`, `think: false`, and a JSON schema in `format`. Redirects are rejected. There are no retries, cloud providers, or fallbacks. Ollama must already be running with the chosen model installed.
+The service does not import the WhatsApp client, read sessions, or store data. The API route passes validated snapshots to it without refetching messages or requiring WhatsApp readiness. It calls only `http://127.0.0.1:11434/api/chat`, using Node's built-in `fetch`, `stream: false`, `think: false`, and a JSON schema in `format`. Redirects are rejected. There are no retries, cloud providers, or fallbacks. Ollama must already be running with the chosen model installed.
 
 The existing environment config pattern defaults `OLLAMA_MODEL` to `qwen3:4b`. Set it before loading the service, for example `$env:OLLAMA_MODEL = 'qwen3:4b'` in PowerShell. The URL cannot be configured. No dependency or lockfile changes are required.
 
@@ -253,3 +254,43 @@ node --test backend/test/analysis.test.js
 ~~~
 
 Run all offline backend regressions with `npm.cmd --prefix backend test`. These tests use fake messages and mocked Ollama fetch; they do not contact Ollama or run live WhatsApp.
+
+## Displayed-snapshot analysis API and dashboard
+
+`POST /api/analysis` accepts only `{ groups: [...] }`. Each group has exactly `groupId`, `messages`, and `history`:
+
+~~~json
+{
+  "groups": [{
+    "groupId": "123@g.us",
+    "messages": [{ "id": "dummy-1", "groupId": "123@g.us", "timestamp": 100, "type": "chat", "body": "Send the draft tomorrow.", "fromMe": false }],
+    "history": { "reason": "history_unavailable", "scanned": 1, "loads": 1 }
+  }]
+}
+~~~
+
+All groups are validated before any analysis starts. Supply 1–5 unique WhatsApp group IDs (at most 80 characters), each with 0–50 unique messages and the service's per-group text/ID/input-byte limits above. Every message must have exactly the six fields shown: its groupId must match, timestamp must be a nonnegative safe integer in Unix seconds, type must be chat, and fromMe must be boolean. History requires an existing reason (`requested_count`, `scan_limit`, or `history_unavailable`), scanned (integer 0–500 and at least the message count), and loads (integer 0–5); optional operation/code diagnostic strings are preserved and limited to 100 characters. Snapshot history is caller-supplied context, not independently verified completeness. No group names or extra message fields are accepted.
+
+The complete JSON body is limited to 192 KB; all other existing routes retain their 4 KB limit. Compressed bodies remain disabled. Empty requests and requests with only empty groups are rejected with 400. In mixed requests, empty groups return `skipped: "empty_group"` without calling Ollama. A single app-wide analysis request runs at a time (429 `ANALYSIS_BUSY` for overlaps), groups run sequentially, and the lock releases after success or failure. Five groups may take about five minutes at the existing 60-second per-group deadline. A client cancellation does not imply that server-side analysis has finished; retry may receive 429 until the lock releases.
+
+The response is `{ results: [...] }`, with each entry containing `groupId`, unchanged `history`, and `scope: "retrieved_messages_only"`, plus one of `analysis: { summary, importantUpdates, tasks }`, `error: { code, message }`, or `skipped`. HTTP 200 means no group failed; 207 means at least one failed. Known Ollama error codes are preserved with fixed safe messages; unexpected per-group failures use `ANALYSIS_FAILED`. Nothing is persisted or logged. Analysis never fetches WhatsApp history or changes read status.
+
+The Analyze messages button sends only displayed successful group snapshots, including successful empty groups for explicit skipping. Failed message loads remain visible in the messages panel and are excluded. It is enabled only with some displayed messages and while neither loading nor analysis is active. Changing selection, starting a load, or changing the displayed snapshot clears insights and invalidates pending responses; stale message-load responses are also ignored. Results show per-group errors, concise summaries, updates, tasks, and stated deadlines, with expandable source-message text. All content is rendered as text. Partial/unavailable history is labeled, and every analysis is scoped to retrieved messages rather than complete history. No messages or results are stored in localStorage.
+
+Offline UI and API verification from the project root:
+
+~~~powershell
+npm.cmd --prefix backend test
+node --test frontend/test/*.test.cjs
+npm.cmd --prefix frontend run build
+~~~
+
+Tests mock analysis/fetch and use synthetic messages. They check validation, isolation, locking, request budgets, protections, loading/errors, history labels, escaping/source views, and stale responses. They do not establish model quality or verify a live browser/service workflow.
+
+Manual steps for the user when ready (not run as part of this change):
+
+1. Start your existing local Ollama with the configured model available, then start the backend normally. Start Vue with `npm.cmd --prefix frontend run dev` and open `http://127.0.0.1:5173` (the dev proxy targets backend port 3001).
+2. Select groups and load messages. Analyze should be disabled during loading and for empty results. Press Analyze messages; verify loading and per-group summaries, updates, tasks, deadlines, and expandable sources. Review findings against source text.
+3. Check that scan-limit/unavailable history shows retrieved-message-only scope and partial-history labels. A successful empty group alongside populated groups should show an explicit skip.
+4. Change selection or load messages while analysis is pending. Insights should clear and old results should not return. Load and analyze the new snapshot after the active request settles.
+5. Stop Ollama and analyze a displayed snapshot to check safe errors; restart it to retry. Compare WhatsApp read status manually if desired. Analysis itself makes no WhatsApp calls; offline checks cannot establish the live library's read-status behavior.

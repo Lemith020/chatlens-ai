@@ -63,3 +63,15 @@ export async function getGroupMessages(groupId, { signal } = {}) {
     history: data.history,
   }
 }
+
+export async function analyzeMessages(groups, { signal } = {}) {
+  const response = await fetch('/api/analysis', {
+    method: 'POST', cache: 'no-store', signal,
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groups }),
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error?.message || `Analysis request failed (${response.status}).`)
+  if (!Array.isArray(data.results)) throw new Error('Unexpected analysis response format.')
+  return data.results
+}

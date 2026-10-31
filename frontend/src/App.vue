@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import AppHeader from './components/layout/AppHeader.vue'
-import {getConnectionStatus,getGroups,getGroupMessages,} from './services/api'
+import {getConnectionStatus,getGroups,getGroupMessages,analyzeMessages} from './services/api'
+import { useAnalysis } from './services/analysis-state'
 import GroupSelector from './components/groups/GroupSelector.vue'
 
 
@@ -17,6 +18,16 @@ const messagesLoading = ref(false)
 const messageResults = ref([])
 const messagesError = ref('')
 const hasLoadedMessages = ref(false)
+const { analysisLoading, analysisResults, analysisError, canAnalyze, analyzeDisplayed, dispose } =
+  useAnalysis(messageResults, selectedGroupIds, messagesLoading, analyzeMessages)
+let messageVersion = 0
+watch(selectedGroupIds, () => {
+  messageVersion++
+  messageResults.value = []
+  hasLoadedMessages.value = false
+}, { deep: true, flush: 'sync' })
+const groupName = (id) => messageResults.value.find((g) => g.groupId === id)?.groupName || id
+const sourceMessage = (groupId, id) => messageResults.value.find((g) => g.groupId === groupId)?.messages.find((m) => m.id === id)?.body || 'Source unavailable'
 
 const statusController = new AbortController()
 
@@ -46,6 +57,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  messageVersion++
+  dispose()
   statusController.abort()
 })
 
@@ -95,6 +108,7 @@ async function loadMessages(groupIds) {
   }
 
   messagesLoading.value = true
+  const version = ++messageVersion
   messagesError.value = ''
   messageResults.value = []
   hasLoadedMessages.value = false
@@ -110,6 +124,7 @@ async function loadMessages(groupIds) {
         const data = await getGroupMessages(groupId, {
           signal: statusController.signal,
         })
+        if (version !== messageVersion) return
 
         results.push({
           groupId,
@@ -119,6 +134,7 @@ async function loadMessages(groupIds) {
           error: '',
         })
       } catch (error) {
+        if (version !== messageVersion) return
         if (error.name === 'AbortError') return
 
         results.push({
@@ -130,6 +146,7 @@ async function loadMessages(groupIds) {
       }
     }
 
+    if (version !== messageVersion) return
     messageResults.value = results
     hasLoadedMessages.value = true
   } finally {
@@ -183,7 +200,7 @@ function formatMessageTime(timestamp) {
           </p>
         </div>
 
-        <span class="preview-badge">UI preview</span>
+        <span class="preview-badge">Local AI</span>
       </section>
 
       <div class="workspace">
@@ -278,7 +295,7 @@ function formatMessageTime(timestamp) {
       </div>
     </section>
 
-        <section class="panel analysis-panel">
+        <section class="panel analysis-panel" :aria-busy="analysisLoading">
           <div class="panel-heading">
             <div>
               <h3>AI insights</h3>
@@ -286,44 +303,47 @@ function formatMessageTime(timestamp) {
             </div>
           </div>
 
-          <div class="insight-item">
-            <span class="insight-icon" aria-hidden="true">!</span>
-            <div>
-              <h4>Important updates</h4>
-              <p>Key announcements and useful information.</p>
-            </div>
-          </div>
-
-          <div class="insight-item">
-            <span class="insight-icon" aria-hidden="true">≡</span>
-            <div>
-              <h4>Conversation summary</h4>
-              <p>A short overview of the discussion.</p>
-            </div>
-          </div>
-
-          <div class="insight-item">
-            <span class="insight-icon" aria-hidden="true">✓</span>
-            <div>
-              <h4>Tasks and deadlines</h4>
-              <p>Actions and dates you may need to remember.</p>
-            </div>
-          </div>
+          <p v-if="analysisLoading" role="status">Analyzing retrieved messages locally…</p>
+          <p v-if="analysisError" class="notice" role="alert">{{ analysisError }}</p>
+          <section v-for="result in analysisResults" :key="result.groupId" class="group-result analysis-result">
+            <h4>{{ groupName(result.groupId) }}</h4>
+            <p class="result-note">Analysis of only the retrieved messages, not complete group history.</p>
+            <p v-if="result.history?.reason === 'history_unavailable'" class="result-note">History is unavailable; results are partial.</p>
+            <p v-else-if="result.history?.reason === 'scan_limit'" class="result-note">Search limits reached; results may be incomplete.</p>
+            <p v-if="result.error" class="notice" role="alert">{{ result.error.message }}</p>
+            <p v-else-if="result.skipped" class="result-note">Skipped: no retrieved messages.</p>
+            <template v-else-if="result.analysis">
+              <h4>Summary</h4>
+              <p class="message-body">{{ result.analysis.summary || 'No substantive discussion.' }}</p>
+              <template v-for="field in ['importantUpdates', 'tasks']" :key="field">
+                <h4>{{ field === 'tasks' ? 'Tasks and deadlines' : 'Important updates' }}</h4>
+                <p v-if="!result.analysis[field].length" class="result-note">None identified.</p>
+                <article v-for="(item, index) in result.analysis[field]" :key="index" class="message-card">
+                  <p class="message-body">{{ item.text }}</p>
+                  <p v-if="field === 'tasks'" class="result-note">Deadline: {{ item.deadlineText === null ? 'Not stated' : item.deadlineText }}</p>
+                  <details v-for="id in item.messageIds" :key="id">
+                    <summary class="source-reference">View source: {{ id }}</summary>
+                    <p class="message-body">{{ sourceMessage(result.groupId, id) }}</p>
+                  </details>
+                </article>
+              </template>
+            </template>
+          </section>
 
           <div class="analysis-action">
-            <button class="primary-button" type="button" disabled>
-              Analyze messages
+            <button class="primary-button" type="button" :disabled="!canAnalyze" @click="analyzeDisplayed">
+              {{ analysisLoading ? 'Analyzing…' : 'Analyze messages' }}
             </button>
 
             <p class="helper-text">
-              Local AI integration is not configured yet.
+              Uses local Ollama. Review generated insights against their sources.
             </p>
           </div>
         </section>
       </div>
 
       <footer class="footer">
-        UI preview only. No WhatsApp or AI requests are made by this page.
+        Messages are loaded on request. Analysis uses the displayed snapshot and does not refetch WhatsApp history.
       </footer>
     </main>
   </div>
@@ -584,6 +604,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
 }
+.analysis-result { margin-bottom: 24px; overflow-wrap: anywhere; }
+.analysis-result h4 { margin: 12px 0 6px; }
+.source-reference { cursor: pointer; font-size: 12px; overflow-wrap: anywhere; }
 
 .insight-item {
   display: flex;
